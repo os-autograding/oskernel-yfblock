@@ -2,20 +2,19 @@ name: GitHub Classroom Workflow
 
 on: [push]
 
-permissions:
-  checks: write
-  actions: read
-  contents: read
-
 env:
   IMG_URL: https://github.com/os-autograding/testsuits-in-one/raw/gh-pages/fat32.img # 镜像url
   TIMEOUT: 60 # 超时时间
   SCRIPT_REPO: https://github.com/os-autograding/EvaluationScript # 脚本仓库
+  TZ: Asia/Shanghai # 设置时区
 
 jobs:
   build:
     name: Autograding
     runs-on: ubuntu-latest
+    outputs:
+      details: ${{ steps.autograding.outputs.details }}
+      points: ${{ steps.autograding.outputs.points}}
     steps:
       - uses: actions/checkout@v3
       - uses: actions-rs/toolchain@v1
@@ -71,5 +70,29 @@ jobs:
         run: |
           git clone $SCRIPT_REPO .github/classroom
       - uses: yfblock/os-autograding@master
+        id: autograding
         with:
           outputFile: qemu_run_output.txt
+  deploy:
+    name: Deploy to pages
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Test Autograding Output
+        run: |
+          echo "${{ needs.build.outputs.details }}"
+      - run: |
+          mkdir autograding_logs
+          cd autograding_logs
+          echo -ne "${{ needs.build.outputs.details }}\nPoints: ${{ needs.build.outputs.points }}" \
+            >> `date +%Y_%m_%d_%H_%M_%S`.txt
+
+      - name: GitHub Pages
+        uses: crazy-max/ghaction-github-pages@v3
+        with:
+          target_branch: gh-pages
+          build_dir: autograding_logs
+          keep_history: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
