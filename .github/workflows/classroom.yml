@@ -73,6 +73,7 @@ jobs:
         id: autograding
         with:
           outputFile: qemu_run_output.txt
+          scriptPath: .github/classroom
   deploy:
     name: Deploy to pages
     needs: build
