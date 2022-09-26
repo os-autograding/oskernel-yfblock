@@ -5,6 +5,9 @@
 #![allow(clippy::identity_op)]
 #![allow(dead_code)]
 
+// #[macro_use]
+extern crate log;
+
 extern crate alloc;
 
 mod blk;
@@ -19,7 +22,6 @@ mod queue;
 pub use self::blk::{BlkResp, RespStatus, VirtIOBlk};
 pub use self::console::VirtIOConsole;
 pub use self::gpu::VirtIOGpu;
-pub use self::hal::{Hal, PhysAddr, VirtAddr};
 pub use self::header::*;
 pub use self::input::{InputConfigSelect, InputEvent, VirtIOInput};
 pub use self::net::VirtIONet;
@@ -27,14 +29,18 @@ use self::queue::VirtQueue;
 use core::mem::size_of;
 use hal::*;
 
-/// The page size in bytes supported by the library (4 KiB).
 const PAGE_SIZE: usize = 0x1000;
 
 /// The type returned by driver methods.
 pub type Result<T = ()> = core::result::Result<T, Error>;
 
+// pub struct Error {
+//     kind: ErrorKind,
+//     reason: &'static str,
+// }
+
 /// The error type of VirtIO drivers.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum Error {
     /// The buffer is too small.
     BufferTooSmall,
@@ -55,12 +61,12 @@ fn align_up(size: usize) -> usize {
     (size + PAGE_SIZE) & !(PAGE_SIZE - 1)
 }
 
-/// The number of pages required to store `size` bytes, rounded up to a whole number of pages.
+/// Pages of `size`.
 fn pages(size: usize) -> usize {
     (size + PAGE_SIZE - 1) / PAGE_SIZE
 }
 
-/// Convert a struct into a byte buffer.
+/// Convert a struct into buffer.
 unsafe trait AsBuf: Sized {
     fn as_buf(&self) -> &[u8] {
         unsafe { core::slice::from_raw_parts(self as *const _ as _, size_of::<Self>()) }

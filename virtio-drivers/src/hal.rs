@@ -1,47 +1,36 @@
-#[cfg(test)]
-pub mod fake;
-
 use super::*;
-use core::marker::PhantomData;
 
-/// A virtual memory address in the address space of the program.
-pub type VirtAddr = usize;
+type VirtAddr = usize;
+type PhysAddr = usize;
 
-/// A physical address as used for virtio.
-pub type PhysAddr = usize;
-
-/// A region of contiguous physical memory used for DMA.
-#[derive(Debug)]
-pub struct DMA<H: Hal> {
-    paddr: usize,
-    pages: usize,
-    _phantom: PhantomData<H>,
+pub struct DMA {
+    paddr: u32,
+    pages: u32,
 }
 
-impl<H: Hal> DMA<H> {
+impl DMA {
     pub fn new(pages: usize) -> Result<Self> {
-        let paddr = H::dma_alloc(pages);
+        let paddr = unsafe { virtio_dma_alloc(pages) };
         if paddr == 0 {
             return Err(Error::DmaError);
         }
         Ok(DMA {
-            paddr,
-            pages,
-            _phantom: PhantomData::default(),
+            paddr: paddr as u32,
+            pages: pages as u32,
         })
     }
 
     pub fn paddr(&self) -> usize {
-        self.paddr
+        self.paddr as usize
     }
 
     pub fn vaddr(&self) -> usize {
-        H::phys_to_virt(self.paddr)
+        phys_to_virt(self.paddr as usize)
     }
 
-    /// Returns the physical page frame number.
+    /// Page frame number
     pub fn pfn(&self) -> u32 {
-        (self.paddr >> 12) as u32
+        self.paddr >> 12
     }
 
     /// Convert to a buffer
@@ -50,23 +39,24 @@ impl<H: Hal> DMA<H> {
     }
 }
 
-impl<H: Hal> Drop for DMA<H> {
+impl Drop for DMA {
     fn drop(&mut self) {
-        let err = H::dma_dealloc(self.paddr as usize, self.pages as usize);
+        let err = unsafe { virtio_dma_dealloc(self.paddr as usize, self.pages as usize) };
         assert_eq!(err, 0, "failed to deallocate DMA");
     }
 }
 
-/// The interface which a particular hardware implementation must implement.
-pub trait Hal {
-    /// Allocates the given number of contiguous physical pages of DMA memory for virtio use.
-    fn dma_alloc(pages: usize) -> PhysAddr;
-    /// Deallocates the given contiguous physical DMA memory pages.
-    fn dma_dealloc(paddr: PhysAddr, pages: usize) -> i32;
-    /// Converts a physical address used for virtio to a virtual address which the program can
-    /// access.
-    fn phys_to_virt(paddr: PhysAddr) -> VirtAddr;
-    /// Converts a virtual address which the program can access to the corresponding physical
-    /// address to use for virtio.
-    fn virt_to_phys(vaddr: VirtAddr) -> PhysAddr;
+pub fn phys_to_virt(paddr: PhysAddr) -> VirtAddr {
+    unsafe { virtio_phys_to_virt(paddr) }
+}
+
+pub fn virt_to_phys(vaddr: VirtAddr) -> PhysAddr {
+    unsafe { virtio_virt_to_phys(vaddr) }
+}
+
+extern "C" {
+    fn virtio_dma_alloc(pages: usize) -> PhysAddr;
+    fn virtio_dma_dealloc(paddr: PhysAddr, pages: usize) -> i32;
+    fn virtio_phys_to_virt(paddr: PhysAddr) -> VirtAddr;
+    fn virtio_virt_to_phys(vaddr: VirtAddr) -> PhysAddr;
 }

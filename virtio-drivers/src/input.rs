@@ -9,14 +9,14 @@ use volatile::{ReadOnly, WriteOnly};
 /// An instance of the virtio device represents one such input device.
 /// Device behavior mirrors that of the evdev layer in Linux,
 /// making pass-through implementations on top of evdev easy.
-pub struct VirtIOInput<'a, H: Hal> {
+pub struct VirtIOInput<'a> {
     header: &'static mut VirtIOHeader,
-    event_queue: VirtQueue<'a, H>,
-    status_queue: VirtQueue<'a, H>,
+    event_queue: VirtQueue<'a>,
+    status_queue: VirtQueue<'a>,
     event_buf: Box<[InputEvent; 32]>,
 }
 
-impl<'a, H: Hal> VirtIOInput<'a, H> {
+impl<'a> VirtIOInput<'a> {
     /// Create a new VirtIO-Input driver.
     pub fn new(header: &'static mut VirtIOHeader) -> Result<Self> {
         let mut event_buf = Box::new([InputEvent::default(); QUEUE_SIZE]);

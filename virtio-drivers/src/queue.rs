@@ -11,10 +11,10 @@ use volatile::Volatile;
 /// The mechanism for bulk data transport on virtio devices.
 ///
 /// Each device can have zero or more virtqueues.
-#[derive(Debug)]
-pub struct VirtQueue<'a, H: Hal> {
+#[repr(C)]
+pub struct VirtQueue<'a> {
     /// DMA guard
-    dma: DMA<H>,
+    dma: DMA,
     /// Descriptor table
     desc: &'a mut [Descriptor],
     /// Available ring
@@ -24,10 +24,7 @@ pub struct VirtQueue<'a, H: Hal> {
 
     /// The index of queue
     queue_idx: u32,
-    /// The size of the queue.
-    ///
-    /// This is both the number of descriptors, and the number of slots in the available and used
-    /// rings.
+    /// The size of queue
     queue_size: u16,
     /// The number of used queues.
     num_used: u16,
@@ -37,7 +34,7 @@ pub struct VirtQueue<'a, H: Hal> {
     last_used_idx: u16,
 }
 
-impl<H: Hal> VirtQueue<'_, H> {
+impl VirtQueue<'_> {
     /// Create a new VirtQueue.
     pub fn new(header: &mut VirtIOHeader, idx: usize, size: u16) -> Result<Self> {
         if header.queue_used(idx as u32) {
@@ -47,7 +44,7 @@ impl<H: Hal> VirtQueue<'_, H> {
             return Err(Error::InvalidParam);
         }
         let layout = VirtQueueLayout::new(size);
-        // Allocate contiguous pages.
+        // alloc continuous pages
         let dma = DMA::new(layout.size / PAGE_SIZE)?;
 
         header.queue_set(idx as u32, size as u32, PAGE_SIZE as u32, dma.pfn());
@@ -57,7 +54,7 @@ impl<H: Hal> VirtQueue<'_, H> {
         let avail = unsafe { &mut *((dma.vaddr() + layout.avail_offset) as *mut AvailRing) };
         let used = unsafe { &mut *((dma.vaddr() + layout.used_offset) as *mut UsedRing) };
 
-        // Link descriptors together.
+        // link descriptors together
         for i in 0..(size - 1) {
             desc[i as usize].next.write(i + 1);
         }
@@ -92,14 +89,14 @@ impl<H: Hal> VirtQueue<'_, H> {
         let mut last = self.free_head;
         for input in inputs.iter() {
             let desc = &mut self.desc[self.free_head as usize];
-            desc.set_buf::<H>(input);
+            desc.set_buf(input);
             desc.flags.write(DescFlags::NEXT);
             last = self.free_head;
             self.free_head = desc.next.read();
         }
         for output in outputs.iter() {
             let desc = &mut self.desc[self.free_head as usize];
-            desc.set_buf::<H>(output);
+            desc.set_buf(output);
             desc.flags.write(DescFlags::NEXT | DescFlags::WRITE);
             last = self.free_head;
             self.free_head = desc.next.read();
@@ -217,9 +214,8 @@ struct Descriptor {
 }
 
 impl Descriptor {
-    fn set_buf<H: Hal>(&mut self, buf: &[u8]) {
-        self.addr
-            .write(H::virt_to_phys(buf.as_ptr() as usize) as u64);
+    fn set_buf(&mut self, buf: &[u8]) {
+        self.addr.write(virt_to_phys(buf.as_ptr() as usize) as u64);
         self.len.write(buf.len() as u32);
     }
 }
@@ -262,103 +258,4 @@ struct UsedRing {
 struct UsedElem {
     id: Volatile<u32>,
     len: Volatile<u32>,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::hal::fake::FakeHal;
-    use core::mem::zeroed;
-
-    #[test]
-    fn invalid_queue_size() {
-        let mut header = unsafe { zeroed() };
-        // Size not a power of 2.
-        assert_eq!(
-            VirtQueue::<FakeHal>::new(&mut header, 0, 3).unwrap_err(),
-            Error::InvalidParam
-        );
-    }
-
-    #[test]
-    fn queue_too_big() {
-        let mut header = VirtIOHeader::make_fake_header(0, 0, 0, 4);
-        assert_eq!(
-            VirtQueue::<FakeHal>::new(&mut header, 0, 5).unwrap_err(),
-            Error::InvalidParam
-        );
-    }
-
-    #[test]
-    fn queue_already_used() {
-        let mut header = VirtIOHeader::make_fake_header(0, 0, 0, 4);
-        VirtQueue::<FakeHal>::new(&mut header, 0, 4).unwrap();
-        assert_eq!(
-            VirtQueue::<FakeHal>::new(&mut header, 0, 4).unwrap_err(),
-            Error::AlreadyUsed
-        );
-    }
-
-    #[test]
-    fn add_empty() {
-        let mut header = VirtIOHeader::make_fake_header(0, 0, 0, 4);
-        let mut queue = VirtQueue::<FakeHal>::new(&mut header, 0, 4).unwrap();
-        assert_eq!(queue.add(&[], &[]).unwrap_err(), Error::InvalidParam);
-    }
-
-    #[test]
-    fn add_too_big() {
-        let mut header = VirtIOHeader::make_fake_header(0, 0, 0, 4);
-        let mut queue = VirtQueue::<FakeHal>::new(&mut header, 0, 4).unwrap();
-        assert_eq!(queue.available_desc(), 4);
-        assert_eq!(
-            queue
-                .add(&[&[], &[], &[]], &[&mut [], &mut []])
-                .unwrap_err(),
-            Error::BufferTooSmall
-        );
-    }
-
-    #[test]
-    fn add_buffers() {
-        let mut header = VirtIOHeader::make_fake_header(0, 0, 0, 4);
-        let mut queue = VirtQueue::<FakeHal>::new(&mut header, 0, 4).unwrap();
-        assert_eq!(queue.size(), 4);
-        assert_eq!(queue.available_desc(), 4);
-
-        // Add a buffer chain consisting of two device-readable parts followed by two
-        // device-writable parts.
-        let token = queue
-            .add(&[&[1, 2], &[3]], &[&mut [0, 0], &mut [0]])
-            .unwrap();
-
-        assert_eq!(queue.available_desc(), 0);
-        assert!(!queue.can_pop());
-
-        let first_descriptor_index = queue.avail.ring[0].read();
-        assert_eq!(first_descriptor_index, token);
-        assert_eq!(queue.desc[first_descriptor_index as usize].len.read(), 2);
-        assert_eq!(
-            queue.desc[first_descriptor_index as usize].flags.read(),
-            DescFlags::NEXT
-        );
-        let second_descriptor_index = queue.desc[first_descriptor_index as usize].next.read();
-        assert_eq!(queue.desc[second_descriptor_index as usize].len.read(), 1);
-        assert_eq!(
-            queue.desc[second_descriptor_index as usize].flags.read(),
-            DescFlags::NEXT
-        );
-        let third_descriptor_index = queue.desc[second_descriptor_index as usize].next.read();
-        assert_eq!(queue.desc[third_descriptor_index as usize].len.read(), 2);
-        assert_eq!(
-            queue.desc[third_descriptor_index as usize].flags.read(),
-            DescFlags::NEXT | DescFlags::WRITE
-        );
-        let fourth_descriptor_index = queue.desc[third_descriptor_index as usize].next.read();
-        assert_eq!(queue.desc[fourth_descriptor_index as usize].len.read(), 1);
-        assert_eq!(
-            queue.desc[fourth_descriptor_index as usize].flags.read(),
-            DescFlags::WRITE
-        );
-    }
 }

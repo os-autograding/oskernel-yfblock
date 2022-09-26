@@ -1,10 +1,8 @@
 use virtio_drivers::VirtIOBlk;
-use crate::virtio_impl::HalImpl;
-
 use super::BlockDevice;
 
 // 虚拟IO设备
-pub struct VirtIOBlock(pub VirtIOBlk<'static, HalImpl>);
+pub struct VirtIOBlock(pub VirtIOBlk<'static>);
 
 impl BlockDevice for VirtIOBlock {
     fn read_block(&mut self, sector_offset: usize, buf: &mut [u8]) {

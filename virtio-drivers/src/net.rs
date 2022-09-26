@@ -13,14 +13,14 @@ use volatile::{ReadOnly, Volatile};
 /// Empty buffers are placed in one virtqueue for receiving packets, and
 /// outgoing packets are enqueued into another for transmission in that order.
 /// A third command queue is used to control advanced filtering features.
-pub struct VirtIONet<'a, H: Hal> {
+pub struct VirtIONet<'a> {
     header: &'static mut VirtIOHeader,
     mac: EthernetAddress,
-    recv_queue: VirtQueue<'a, H>,
-    send_queue: VirtQueue<'a, H>,
+    recv_queue: VirtQueue<'a>,
+    send_queue: VirtQueue<'a>,
 }
 
-impl<H: Hal> VirtIONet<'_, H> {
+impl VirtIONet<'_> {
     /// Create a new VirtIO-Net driver.
     pub fn new(header: &'static mut VirtIOHeader) -> Result<Self> {
         header.begin_init(|features| {

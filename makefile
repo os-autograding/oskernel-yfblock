@@ -34,12 +34,12 @@ endif
 
 .PHONY: all doc kernel build clean qemu run k210 flash
 
-all: qemu
-	cp $(BOOTLOADER) sbi-qemu
-	cp $(KERNEL_FILE) kernel-qemu
+# all: qemu
+# 	cp $(BOOTLOADER) sbi-qemu
+# 	cp $(KERNEL_FILE) kernel-qemu
 
-#all: k210
-#	@cp $(BIN_FILE) os.bin
+all: k210
+	@cp $(BIN_FILE) os.bin
 
 
 build: kernel $(BIN_FILE)
@@ -49,8 +49,7 @@ ifeq ($(MODE), release)
 	echo "release"
 endif
 	@cp $(LINK_FILE_DIR)/linker-qemu.ld $(LINK_FILE_DIR)/linker.ld
-	@RUSTFLAGS="-Clink-arg=-T$(LINK_FILE_DIR)/linker.ld" cargo build $(MODE_FLAG) --features "board_qemu $(FEATURES)"
-#	--offline
+	@RUSTFLAGS="-Clink-arg=-T$(LINK_FILE_DIR)/linker.ld" cargo build $(MODE_FLAG) --features "board_qemu $(FEATURES)" --offline
 	@rm $(LINK_FILE_DIR)/linker.ld
 	$(OBJCOPY) $(KERNEL_FILE) --strip-all -O binary $(BIN_FILE)
 

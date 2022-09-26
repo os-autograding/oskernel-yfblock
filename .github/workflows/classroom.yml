@@ -61,7 +61,7 @@ jobs:
             -machine virt \
             -bios sbi-qemu \
             -device loader,file=kernel-qemu,addr=0x80200000 \
-            -drive file=fat32.img,if=none,format=raw,id=x0 \
+            -drive file=fs-origin.img,if=none,format=raw,id=x0 \
             -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0 \
             -kernel kernel-qemu \
             -nographic \
