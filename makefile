@@ -38,8 +38,8 @@ all: qemu
 	cp $(BOOTLOADER) sbi-qemu
 	cp $(KERNEL_FILE) kernel-qemu
 
-#all: k210
-#	@cp $(BIN_FILE) os.bin
+# all: k210
+# 	@cp $(BIN_FILE) os.bin
 
 
 build: kernel $(BIN_FILE)
@@ -50,7 +50,6 @@ ifeq ($(MODE), release)
 endif
 	@cp $(LINK_FILE_DIR)/linker-qemu.ld $(LINK_FILE_DIR)/linker.ld
 	@RUSTFLAGS="-Clink-arg=-T$(LINK_FILE_DIR)/linker.ld" cargo build $(MODE_FLAG) --features "board_qemu $(FEATURES)"
-#	--offline
 	@rm $(LINK_FILE_DIR)/linker.ld
 	$(OBJCOPY) $(KERNEL_FILE) --strip-all -O binary $(BIN_FILE)
 
@@ -63,7 +62,7 @@ clean:
 
 k210: 
 	@cp $(LINK_FILE_DIR)/linker-k210.ld $(LINK_FILE_DIR)/linker.ld
-	RUSTFLAGS="-Clink-arg=-T$(LINK_FILE_DIR)/linker.ld" cargo build $(MODE_FLAG) --features "board_k210 $(FEATURES)" --offline
+	RUSTFLAGS="-Clink-arg=-T$(LINK_FILE_DIR)/linker.ld" cargo build $(MODE_FLAG) --features "board_k210 $(FEATURES)" 
 	@rm $(LINK_FILE_DIR)/linker.ld
 	$(OBJCOPY) $(KERNEL_FILE) --strip-all -O binary $(BIN_FILE)
 	@cp $(BOOTLOADER_K210) $(BOOTLOADER_K210).copy

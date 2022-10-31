@@ -3,7 +3,7 @@ use crate::sbi::set_timer;
 use riscv::register::{sie, time};
 
 #[cfg(not(feature = "board_k210"))]
-const CLOCK_FREQ: usize = 12500000;
+const CLOCK_FREQ: usize = 1250000;
 
 #[cfg(feature = "board_k210")]
 // const CLOCK_FREQ: usize = 4030000000 / 62;
@@ -13,10 +13,11 @@ const CHANGE_TASK_TICKS: usize = 10;
 
 // const INTERVAL: usize = CLOCK_FREQ / 100;
 // const INTERVAL: usize = CLOCK_FREQ / 25;
-const INTERVAL: usize = CLOCK_FREQ / 1;
+pub const INTERVAL: usize = CLOCK_FREQ;
 
-const MSEC_PER_SEC: usize = 1000;
-const NSEC_PER_SEC: usize = 1_000_000_000;
+pub const MSEC_PER_SEC: usize = 1000;
+pub const USEC_PER_SEC: usize = 1_000_000;
+pub const NSEC_PER_SEC: usize = 1_000_000_000;
 
 // tms_utime记录的是进程执行用户代码的时间.
 // tms_stime记录的是进程执行内核代码的时间.
@@ -45,11 +46,28 @@ pub struct TimeSpec {
     pub tv_nsec: usize       /* 纳秒, 范围在0~999999999 */
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct TimeVal {
+	pub tv_sec: usize,       /* 秒 */
+    pub tv_usec: usize       /* 微秒, 范围在0~999999999 */
+}
+
+impl TimeVal {
+    pub fn now() -> Self {
+        let tick = time::read();
+        Self {
+            tv_sec: tick / CLOCK_FREQ,
+            tv_usec: (tick % CLOCK_FREQ) * USEC_PER_SEC / CLOCK_FREQ,
+        }
+    }
+}
+
 impl TimeSpec {
     pub fn get_now(&mut self) {
-        let ms = get_time_ms();
-        self.tv_sec = ms / 1000;
-        self.tv_nsec = (ms % 1000) * 1000;
+        let tick = time::read();
+        self.tv_sec = tick / CLOCK_FREQ;
+        self.tv_nsec = (tick % CLOCK_FREQ) * NSEC_PER_SEC / CLOCK_FREQ;
     }
 
     pub fn now() -> Self {
@@ -72,11 +90,15 @@ pub fn get_time_sec() -> usize {
 }
 
 pub fn get_time_ms() -> usize {
-    time::read() / (CLOCK_FREQ / MSEC_PER_SEC)
+    time::read() * MSEC_PER_SEC / CLOCK_FREQ
 }
 
 pub fn get_time_us() -> usize {
-    time::read() / (CLOCK_FREQ / MSEC_PER_SEC / MSEC_PER_SEC)
+    time::read() * MSEC_PER_SEC * MSEC_PER_SEC / (CLOCK_FREQ)
+}
+
+pub fn get_time_ns() -> usize {
+    time::read() * MSEC_PER_SEC * NSEC_PER_SEC / (CLOCK_FREQ)
 }
 
 // 下一个任务ticks
